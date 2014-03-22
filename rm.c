@@ -4,7 +4,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <ftw.h>
+#include <errno.h>
+#include <string.h>
 
 void print_info(char *message);
 void rm_recursive();
@@ -44,13 +45,15 @@ int main(int argc, char *argv[]) {
 
 	trash_location = getenv("TRASH");
 	if(!trash_location) {
-		printf("TRASH environment variable is not set");
+		printf("Please set TRASH environment variable\n");
 	}
 	else{
 		printf("TRASH: %s \n", trash_location);
 	}
 
 	printf("f_flag: %d \nh_flag: %d \nr_flag: %d \nfilename: %s \n", f_flag, h_flag, r_flag, file_name);
+
+	rm_non_recursive();
 
 	return 0;
 }
@@ -66,6 +69,19 @@ void rm_recursive() {
 }
 
 void rm_non_recursive() {
+	int result;
+	char destination[strlen(trash_location) + strlen(file_name) + 1];
 
+	strcat(destination, trash_location);
+	strcat(destination, file_name);
+
+	printf("destination: %s \n", destination);
+	result = rename(file_name, destination);
+	if(result != 0) {
+		perror("rename");
+	}
+	else {
+		printf("Moved %s to trash\n", file_name);
+	}
 }
 
