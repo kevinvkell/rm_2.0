@@ -6,15 +6,18 @@
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
+#include <libgen.h>
 
 void print_info(char *message);
 void rm_recursive();
 void rm_non_recursive();
 char *name_trash_file();
 char *try_file_name(char* name_to_try, int number_to_try);
+void copy(char *to_be_copied, char *destination);
 
 int f_flag = 0, h_flag = 0, r_flag = 0;
 char *file_name;
+char *dir_name;
 int current_option;
 char *trash_location;
 
@@ -38,7 +41,8 @@ int main(int argc, char *argv[]) {
 	}
 	
 	if(argc - optind == 1) {
-		file_name = argv[optind];
+		file_name = basename(argv[optind]);
+		dir_name = dirname(argv[optind]);
 	}
 	else {
 		printf("incorrect arguments\n");
@@ -54,7 +58,12 @@ int main(int argc, char *argv[]) {
 		printf("TRASH: %s \n", trash_location);
 	}
 
-	printf("f_flag: %d \nh_flag: %d \nr_flag: %d \nfilename: %s \n", f_flag, h_flag, r_flag, file_name);
+	printf("f_flag: %d \nh_flag: %d \nr_flag: %d \ndirname: %s \nfilename: %s \n", f_flag, h_flag, r_flag, dir_name, file_name);
+
+	if(chdir(dir_name) != 0) {
+		perror("chdir");
+		exit(1);
+	}
 
 	rm_non_recursive();
 
@@ -79,12 +88,21 @@ void rm_non_recursive() {
 
 	printf("destination: %s \n", destination);
 	result = rename(file_name, destination);
-	free(destination);
 	if(result != 0) {
-		perror("rename");
+		if(errno == EXDEV) {
+			copy(file_name, destination);
+			printf("Moved %s to trash\n", file_name);	
+			free(destination);
+		}
+		else{
+			free(destination);	
+			perror("rename");
+			exit(1);
+		}
 	}
 	else {
-		printf("Moved %s to trash\n", file_name);
+			free(destination);
+			printf("Moved %s to trash\n", file_name);
 	}
 }
 
@@ -124,3 +142,14 @@ char *try_file_name(char *name_to_try, int number_to_try) {
 	}
 }
 
+void copy(char *to_be_copied, char *destination) {
+	if (link(to_be_copied, destination) != 0) {
+		perror("link");
+		exit(1);
+	}
+	
+	if (unlink(to_be_copied) != 0) {
+		perror("unlink");
+		exit(1);
+	}
+}
