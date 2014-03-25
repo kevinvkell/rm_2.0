@@ -7,7 +7,9 @@
 #include <errno.h>
 #include <string.h>
 #include <libgen.h>
+#include <fcntl.h>
 
+#define BUFF_SIZE 512
 void print_info(char *message);
 void rm_recursive();
 void rm_non_recursive();
@@ -143,13 +145,41 @@ char *try_file_name(char *name_to_try, int number_to_try) {
 }
 
 void copy(char *to_be_copied, char *destination) {
-	if (link(to_be_copied, destination) != 0) {
-		perror("link");
+	char buffer[BUFF_SIZE];
+	int old_file, new_file;
+	ssize_t bytes_read, bytes_written;
+
+	old_file = open(to_be_copied, O_RDONLY | O_NONBLOCK);
+	if (old_file < 0) {
+		perror("open old file");
 		exit(1);
 	}
-	
-	if (unlink(to_be_copied) != 0) {
-		perror("unlink");
+
+	new_file = open(destination, O_WRONLY | O_CREAT | O_EXCL |O_NONBLOCK);
+	if (new_file < 0) {
+		perror("open new file");
+		exit(1);
+	}
+
+	while((bytes_read = read(old_file, buffer, BUFF_SIZE)) > 0) {
+		bytes_written = write(new_file, buffer, bytes_read);
+		if(bytes_written != bytes_read) {
+			printf("failed to write properly\n");
+			exit(1);
+		}
+	}
+
+	if(close(old_file) != 0) {
+		perror("close old file");
+		exit(1);
+	}
+	if(close(new_file) != 0) {
+		perror("close new file");
+		exit(1);
+	}
+
+	if(remove(to_be_copied) != 0) {
+		perror("remove old file");
 		exit(1);
 	}
 }
