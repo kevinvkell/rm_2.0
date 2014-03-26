@@ -1,5 +1,6 @@
 //Kevin Kell
 //Distributed Systems Project 1
+#define _XOPEN_SOURCE 500
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,14 +9,22 @@
 #include <string.h>
 #include <libgen.h>
 #include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <utime.h>
+#include <ftw.h>
 
 #define BUFF_SIZE 512
-void print_info(char *message);
+#define DIR_DEPTH 25
+
 void rm_recursive();
 void rm_non_recursive();
 char *name_trash_file();
 char *try_file_name(char* name_to_try, int number_to_try);
-void copy(char *to_be_copied, char *destination);
+void copy(const char *to_be_copied, const char *destination);
+void copy_directory(const char *to_be_copied, const char *destination);
+int tree_function(const char *path, const struct stat *stat_buffer, int typeflag, struct FTW *ftw_buffer);
+void crop_file_path(char *path, int depth_to_keep);
 
 int f_flag = 0, h_flag = 0, r_flag = 0;
 char *file_name;
@@ -43,8 +52,17 @@ int main(int argc, char *argv[]) {
 	}
 	
 	if(argc - optind == 1) {
-		file_name = basename(argv[optind]);
-		dir_name = dirname(argv[optind]);
+		int length = strlen(argv[optind]) + 1;
+		char file_arg_basename[length];
+		char file_arg_dirname[length];
+		
+		strcpy(file_arg_basename, argv[optind]);
+		strcpy(file_arg_dirname, argv[optind]);
+		file_name = malloc(length);
+		strcpy(file_name, basename(file_arg_basename));
+
+		dir_name = malloc(length);
+		strcpy(dir_name, dirname(file_arg_dirname));
 	}
 	else {
 		printf("incorrect arguments\n");
@@ -67,34 +85,65 @@ int main(int argc, char *argv[]) {
 		exit(1);
 	}
 
-	rm_non_recursive();
+	if(r_flag != 0) {
+		rm_recursive();
+	}
+	else {
+		rm_non_recursive();
+	}
+
+	free(file_name);
+	free(dir_name);
 
 	return 0;
 }
 
-void print_info(char *message) {
-	if(h_flag) {
-		printf("%s\n", message);
-	}
-}
-
 void rm_recursive() {
+	struct stat old_file_stat;
+	if(stat(file_name, &old_file_stat) != 0) {
+		perror("stat");
+		exit(1);
+	}
 
+	if(nftw(file_name, tree_function, DIR_DEPTH, FTW_CHDIR | 0) != 0) {
+		perror("nftw");
+		exit(1);
+	}
 }
 
 void rm_non_recursive() {
 	int result;
 	char *destination;
+	struct stat old_file_stat;
+
+	if(stat(file_name, &old_file_stat) != 0) {
+		perror("stat");
+		exit(1);
+	}		
 
 	destination = name_trash_file();
 
 	printf("destination: %s \n", destination);
+
 	result = rename(file_name, destination);
 	if(result != 0) {
 		if(errno == EXDEV) {
-			copy(file_name, destination);
-			printf("Moved %s to trash\n", file_name);	
-			free(destination);
+			struct stat old_file_stat;
+			if(stat(file_name, &old_file_stat) != 0) {
+				perror("stat");
+				exit(1);
+			}
+
+			if(S_ISDIR(old_file_stat.st_mode)) {
+				copy_directory(file_name, destination);
+				printf("Moved %s to trash\n", file_name);
+				free(destination);
+			}
+			else {
+				copy(file_name, destination);
+				printf("Moved %s to trash\n", file_name);	
+				free(destination);
+			}
 		}
 		else{
 			free(destination);	
@@ -144,10 +193,17 @@ char *try_file_name(char *name_to_try, int number_to_try) {
 	}
 }
 
-void copy(char *to_be_copied, char *destination) {
+void copy(const char *to_be_copied, const char *destination) {
 	char buffer[BUFF_SIZE];
 	int old_file, new_file;
 	ssize_t bytes_read, bytes_written;
+	struct stat old_file_stat;
+	struct utimbuf old_file_times;
+
+	if(stat(to_be_copied, &old_file_stat) != 0) {
+		perror("stat");
+		exit(1);
+	}
 
 	old_file = open(to_be_copied, O_RDONLY | O_NONBLOCK);
 	if (old_file < 0) {
@@ -169,6 +225,22 @@ void copy(char *to_be_copied, char *destination) {
 		}
 	}
 
+	if(fchmod(new_file, old_file_stat.st_mode) != 0) {
+		perror("fchmod");
+		exit(1);
+	}
+
+	if(fchown(new_file, old_file_stat.st_uid, old_file_stat.st_gid) != 0) {
+		perror("fchown");
+	}
+
+	old_file_times.actime = old_file_stat.st_atime;
+	old_file_times.modtime = old_file_stat.st_mtime;
+	if(utime(destination, &old_file_times) != 0) {
+		perror("utime");
+		exit(1);
+	}
+
 	if(close(old_file) != 0) {
 		perror("close old file");
 		exit(1);
@@ -180,6 +252,96 @@ void copy(char *to_be_copied, char *destination) {
 
 	if(remove(to_be_copied) != 0) {
 		perror("remove old file");
+	}
+}
+
+void copy_directory(const char *to_be_copied, const char *destination) {
+	struct stat old_file_stat;
+	if(stat(to_be_copied, &old_file_stat) != 0) {
+		perror("stat");
 		exit(1);
 	}
+
+	if((r_flag == 0) && (remove(to_be_copied) != 0)) {
+		perror("remove old directory");
+		exit(1);
+	}	
+
+	if(mkdir(destination, old_file_stat.st_mode)) {
+		perror("mkdir");
+		exit(1);
+	}
+}
+
+int tree_function(const char *path, const struct stat *stat_buffer, int typeflag, struct FTW *ftw_buffer) {
+	char path_copy[strlen(path) + 1];
+	char *working_directory;
+
+	working_directory = getcwd(NULL, 0);
+	strcpy(path_copy, path);
+
+	if(typeflag == FTW_F) {
+		char source_file_name[strlen(working_directory) + strlen(path) + 1];
+		char destination_file_name[strlen(getenv("TRASH")) + strlen(path) + 1];
+
+		strcpy(source_file_name, working_directory);
+		strcat(source_file_name, "/");
+		strcat(source_file_name, basename(path_copy));
+
+		strcpy(destination_file_name, getenv("TRASH"));
+		strcat(destination_file_name, path);
+
+		copy(source_file_name, destination_file_name);
+	/*	char path_copy[strlen(path) + 1];
+		strcpy(path_copy, path);
+		crop_file_path(path_copy, ftw_buffer->level);
+
+		printf("cropped path for %s: %s \n", path, path_copy);
+	*/
+	}
+	else {
+		char destination_directory[strlen(getenv("TRASH")) + strlen(path) + 1];
+
+		strcpy(destination_directory, getenv("TRASH"));
+		strcat(destination_directory, path);
+
+		copy_directory(working_directory, destination_directory);
+	/*	printf("I'm in a directory!\n");
+		char path_copy[strlen(path) + 1];
+		strcpy(path_copy, path);
+		crop_file_path(path_copy, ftw_buffer->level);
+
+		printf("cropped path for %s: %s \n", path, path_copy);
+	*/	
+	}
+	return 0;
+}
+
+void crop_file_path(char *path, int depth_to_keep) {
+	
+
+	int path_length = strlen(path);
+	char directory_levels[DIR_DEPTH][path_length + 1];
+	char cropped_path[path_length + 1];
+	char *token;
+	int i = 0;
+
+	token = strtok(path, "/");
+	while(token != NULL) {
+		char *pointer;
+
+		strcpy(directory_levels[i], token);
+		pointer = directory_levels[i];
+		i++;
+		token = strtok(NULL, "/");
+	}
+
+	memset(cropped_path, 0, path_length + 1);
+	for(i=depth_to_keep; i>=0; i--){
+		char tmp[path_length + 1];
+		sprintf(tmp, "/%s", directory_levels[i]);
+		strcat(cropped_path, tmp);
+	}
+
+	strcpy(path, cropped_path);
 }
