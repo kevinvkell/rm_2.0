@@ -17,6 +17,7 @@
 #define BUFF_SIZE 512
 #define DIR_DEPTH 25
 
+void rm_force();
 void rm_recursive();
 void rm_non_recursive();
 char *name_trash_file();
@@ -24,7 +25,9 @@ char *try_file_name(char* name_to_try, int number_to_try);
 void copy(const char *to_be_copied, const char *destination);
 void copy_directory(const char *to_be_copied, const char *destination);
 int tree_function(const char *path, const struct stat *stat_buffer, int typeflag, struct FTW *ftw_buffer);
+int delete_directory_tree(const char *path, const struct stat *stat_buffer, int typeflag, struct FTW *ftw_buffer);
 void crop_file_path(char *path, int depth_to_keep);
+void usage(void);
 
 int f_flag = 0, h_flag = 0, r_flag = 0;
 char *file_name;
@@ -50,7 +53,10 @@ int main(int argc, char *argv[]) {
 				break;
 		}
 	}
-	
+	if(h_flag != 0) {
+		usage();
+		return 0;
+	}
 	if(argc - optind == 1) {
 		int length = strlen(argv[optind]) + 1;
 		char file_arg_basename[length];
@@ -88,6 +94,9 @@ int main(int argc, char *argv[]) {
 	if(r_flag != 0) {
 		rm_recursive();
 	}
+	if(f_flag != 0) {
+		rm_force();
+	}
 	else {
 		rm_non_recursive();
 	}
@@ -98,6 +107,27 @@ int main(int argc, char *argv[]) {
 	return 0;
 }
 
+void rm_force() {
+	struct stat old_file_stat;
+	if(stat(file_name, &old_file_stat) != 0) {
+		perror("stat");
+		exit(1);
+	}
+
+	if(remove(file_name) != 0) {
+		if((errno == ENOTEMPTY || errno == EEXIST) && (r_flag != 0)) {
+			if(nftw(file_name, delete_directory_tree, DIR_DEPTH, FTW_CHDIR | FTW_DEPTH) != 0) {
+				perror("nftw");
+				exit(1);
+			}
+		}
+		else {
+			perror("remove");
+			exit(1);
+		}
+	}
+}
+
 void rm_recursive() {
 	struct stat old_file_stat;
 	if(stat(file_name, &old_file_stat) != 0) {
@@ -105,7 +135,17 @@ void rm_recursive() {
 		exit(1);
 	}
 
+	if(S_ISREG(old_file_stat.st_mode)) {
+		rm_non_recursive();
+		return;
+	}
+
 	if(nftw(file_name, tree_function, DIR_DEPTH, FTW_CHDIR | 0) != 0) {
+		perror("nftw");
+		exit(1);
+	}
+
+	if(nftw(file_name, delete_directory_tree, DIR_DEPTH, FTW_CHDIR | FTW_DEPTH) != 0) {
 		perror("nftw");
 		exit(1);
 	}
@@ -292,12 +332,6 @@ int tree_function(const char *path, const struct stat *stat_buffer, int typeflag
 		strcat(destination_file_name, path);
 
 		copy(source_file_name, destination_file_name);
-	/*	char path_copy[strlen(path) + 1];
-		strcpy(path_copy, path);
-		crop_file_path(path_copy, ftw_buffer->level);
-
-		printf("cropped path for %s: %s \n", path, path_copy);
-	*/
 	}
 	else {
 		char destination_directory[strlen(getenv("TRASH")) + strlen(path) + 1];
@@ -306,15 +340,35 @@ int tree_function(const char *path, const struct stat *stat_buffer, int typeflag
 		strcat(destination_directory, path);
 
 		copy_directory(working_directory, destination_directory);
-	/*	printf("I'm in a directory!\n");
-		char path_copy[strlen(path) + 1];
-		strcpy(path_copy, path);
-		crop_file_path(path_copy, ftw_buffer->level);
-
-		printf("cropped path for %s: %s \n", path, path_copy);
-	*/	
 	}
 	return 0;
+}
+
+int delete_directory_tree(const char *path, const struct stat *stat_buffer, int typeflag, struct FTW *ftw_buffer) {
+	char *working_directory;
+	char path_copy[strlen(path) + 1];
+
+	strcpy(path_copy, path);
+	working_directory = getcwd(NULL, 0);
+
+	if(typeflag == FTW_F) {
+		remove(basename(path_copy));
+	}
+	else {
+		if(rmdir(working_directory) != 0) {
+			perror("rmdir");
+			exit(1);
+		}
+	}
+
+	return 0;
+}
+
+void usage(void) {
+	fprintf(stderr, "usage: rm [-r] [-f] [h] [<args>]\n");
+	fprintf(stderr, "\t-r <files | directories> removes files and directories recursively\n");
+	fprintf(stderr, "\t-f <files | directories> removes files and directories without moving to TRASH\n");
+	fprintf(stderr, "\t-h prints usage\n");
 }
 
 void crop_file_path(char *path, int depth_to_keep) {
