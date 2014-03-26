@@ -36,6 +36,7 @@ int current_option;
 char *trash_location;
 
 int main(int argc, char *argv[]) {
+	int j = 0;
 	while((current_option = getopt(argc, argv, "fhr")) != -1) {
 		switch(current_option) {
 			case 'f':
@@ -57,23 +58,6 @@ int main(int argc, char *argv[]) {
 		usage();
 		return 0;
 	}
-	if(argc - optind == 1) {
-		int length = strlen(argv[optind]) + 1;
-		char file_arg_basename[length];
-		char file_arg_dirname[length];
-		
-		strcpy(file_arg_basename, argv[optind]);
-		strcpy(file_arg_dirname, argv[optind]);
-		file_name = malloc(length);
-		strcpy(file_name, basename(file_arg_basename));
-
-		dir_name = malloc(length);
-		strcpy(dir_name, dirname(file_arg_dirname));
-	}
-	else {
-		printf("incorrect arguments\n");
-		exit(1);
-	}
 
 	trash_location = getenv("TRASH");
 	if(trash_location == NULL) {
@@ -81,28 +65,40 @@ int main(int argc, char *argv[]) {
 		exit(1);
 	}
 	else{
-		printf("TRASH: %s \n", trash_location);
+		fprintf(stderr, "TRASH: %s \n", trash_location);
 	}
 
-	printf("f_flag: %d \nh_flag: %d \nr_flag: %d \ndirname: %s \nfilename: %s \n", f_flag, h_flag, r_flag, dir_name, file_name);
+	for(j=optind; j<argc; j++) {
+		int length = strlen(argv[j]) + 1;
+		char file_arg_basename[length];
+		char file_arg_dirname[length];
+		
+		strcpy(file_arg_basename, argv[j]);
+		strcpy(file_arg_dirname, argv[j]);
+		file_name = malloc(length);
+		strcpy(file_name, basename(file_arg_basename));
 
-	if(chdir(dir_name) != 0) {
-		perror("chdir");
-		exit(1);
-	}
+		dir_name = malloc(length);
+		strcpy(dir_name, dirname(file_arg_dirname));
 
-	if(r_flag != 0) {
-		rm_recursive();
-	}
-	if(f_flag != 0) {
-		rm_force();
-	}
-	else {
-		rm_non_recursive();
-	}
+		if(chdir(dir_name) != 0) {
+			perror("chdir");
+			exit(1);
+		}
 
-	free(file_name);
-	free(dir_name);
+		if(r_flag != 0) {
+			rm_recursive();
+		}
+		if(f_flag != 0) {
+			rm_force();
+		}
+		else {
+			rm_non_recursive();
+		}
+
+		free(file_name);
+		free(dir_name);
+	}
 
 	return 0;
 }
@@ -115,7 +111,7 @@ void rm_force() {
 	}
 
 	if(remove(file_name) != 0) {
-		if((errno == ENOTEMPTY || errno == EEXIST) && (r_flag != 0)) {
+		if((errno == ENOTEMPTY || errno == EEXIST) && (f_flag != 0)) {
 			if(nftw(file_name, delete_directory_tree, DIR_DEPTH, FTW_CHDIR | FTW_DEPTH) != 0) {
 				perror("nftw");
 				exit(1);

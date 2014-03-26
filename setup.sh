@@ -2,6 +2,7 @@
 cd ~/Distributed_Systems/Project1
 make clean
 make
+cd /tmp
 mkdir dog
 cd dog
 touch cat
