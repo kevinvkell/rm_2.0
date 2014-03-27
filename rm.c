@@ -49,7 +49,7 @@ int main(int argc, char *argv[]) {
 				r_flag = 1;
 				break;
 			case '?':
-				printf("incorrect arguments\n");
+				fprintf(stderr, "incorrect arguments\n");
 				exit(1);
 				break;
 		}
@@ -61,11 +61,8 @@ int main(int argc, char *argv[]) {
 
 	trash_location = getenv("TRASH");
 	if(trash_location == NULL) {
-		printf("Please set TRASH environment variable\n");
+		fprintf(stderr, "Please set TRASH environment variable\n");
 		exit(1);
-	}
-	else{
-		fprintf(stderr, "TRASH: %s \n", trash_location);
 	}
 
 	for(j=optind; j<argc; j++) {
@@ -159,8 +156,6 @@ void rm_non_recursive() {
 
 	destination = name_trash_file();
 
-	printf("destination: %s \n", destination);
-
 	result = rename(file_name, destination);
 	if(result != 0) {
 		if(errno == EXDEV) {
@@ -172,12 +167,10 @@ void rm_non_recursive() {
 
 			if(S_ISDIR(old_file_stat.st_mode)) {
 				copy_directory(file_name, destination);
-				printf("Moved %s to trash\n", file_name);
 				free(destination);
 			}
 			else {
 				copy(file_name, destination);
-				printf("Moved %s to trash\n", file_name);	
 				free(destination);
 			}
 		}
@@ -189,7 +182,6 @@ void rm_non_recursive() {
 	}
 	else {
 			free(destination);
-			printf("Moved %s to trash\n", file_name);
 	}
 }
 
@@ -197,7 +189,7 @@ char *name_trash_file() {
 	char *trash_file_name;
 	trash_file_name = calloc((strlen(trash_location) + strlen(file_name) + 1), sizeof(char));
 	if(trash_file_name == NULL) {
-		printf("could not allocate memory\n");
+		fprintf(stderr, "could not allocate memory\n");
 		exit(1);
 	}
 
@@ -214,7 +206,7 @@ char *try_file_name(char *name_to_try, int number_to_try) {
 	char *new_name_to_try;
 	new_name_to_try = calloc((strlen(name_to_try) + sizeof(int) + 1), sizeof(char));
 	if(new_name_to_try == NULL) {
-		printf("could not allocate memory\n");
+		fprintf(stderr, "could not allocate memory\n");
 		exit(1);
 	}
 	
@@ -256,7 +248,7 @@ void copy(const char *to_be_copied, const char *destination) {
 	while((bytes_read = read(old_file, buffer, BUFF_SIZE)) > 0) {
 		bytes_written = write(new_file, buffer, bytes_read);
 		if(bytes_written != bytes_read) {
-			printf("failed to write properly\n");
+			fprintf(stderr, "failed to write properly\n");
 			exit(1);
 		}
 	}
