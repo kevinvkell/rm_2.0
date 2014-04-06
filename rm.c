@@ -156,6 +156,19 @@ void rm_non_recursive() {
 
 	destination = name_trash_file();
 
+	if(r_flag == 0) {
+		if(rmdir(file_name) == 0) {
+			if(mkdir(file_name, old_file_stat.st_mode) != 0) {
+				perror("mkdir");
+				exit(1);
+			}
+		}
+		else {
+			perror("rmdir");
+			exit(1);
+		}
+	}
+
 	result = rename(file_name, destination);
 	if(result != 0) {
 		if(errno == EXDEV) {
@@ -305,7 +318,8 @@ int tree_function(const char *path, const struct stat *stat_buffer, int typeflag
 	char path_copy[strlen(path) + 1];
 	char *working_directory;
 
-	working_directory = getcwd(NULL, 0);
+	working_directory = malloc(strlen(getcwd(NULL, 0)) + 1);
+	strcpy(working_directory, getcwd(NULL, 0));
 	strcpy(path_copy, path);
 
 	if(typeflag == FTW_F) {
@@ -340,11 +354,14 @@ int delete_directory_tree(const char *path, const struct stat *stat_buffer, int 
 	working_directory = getcwd(NULL, 0);
 
 	if(typeflag == FTW_F) {
-		remove(basename(path_copy));
+		if(remove(basename(path_copy))) {
+			perror("remove");
+			exit(1);
+		}
 	}
 	else {
-		if(rmdir(working_directory) != 0) {
-			perror("rmdir");
+		if(remove(working_directory) != 0) {
+			perror("remove");
 			exit(1);
 		}
 	}

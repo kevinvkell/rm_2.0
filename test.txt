@@ -1,0 +1,6 @@
+****BEGINNING TEST****
+
+
+average rename: 6921440
+average move: 227455820
+average rm -r: 186926050

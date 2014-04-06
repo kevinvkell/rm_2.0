@@ -8,7 +8,7 @@ rm: rm.c
 	gcc rm.c $(CFLAGS) -o rm
 
 dump: dump.c
-	gcc rm.c $(CFLAGS) -o dump
+	gcc dump.c $(CFLAGS) -o dump
 
 clean:
 	rm rm dump

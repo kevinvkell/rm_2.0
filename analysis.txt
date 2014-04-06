@@ -1,0 +1,14 @@
+kevin kell
+analysis
+
+I made a shell script that used the date feature to time operations. you can see the
+script and sample output in test.sh and test.txt. 
+
+I got the date before and after each operation, and repeated this in a for loop 100 
+times for each operation. when completed i calculated averages and put them in the 
+output file.
+
+The average rename and the average move (as can be seen in the output in ns)
+added together is what you would expect the averate rm -r to be, but it was actually 
+shorte thatn that in practice...I think this is because ./rm wasn't working correctly
+
